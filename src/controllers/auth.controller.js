@@ -139,8 +139,74 @@ res.status(200).json({
 })
  }
 
+ async function logoutall(req,res)
+ {
+  const token =req.cookies.refreshtoken;
+   
+    const decode =jwt.verify(token,process.env.jwt_secret)
+    if(!decode)     
+     {
+        return res.status(401).json({message:"Unauthorized"});
 
+     }
+ 
+     await sessionModel.updateMany({
+        userId:decode.id,
+        revoked:false
+     },{
+        revoked:true
+     }
+     ) 
 
+     res.clearCookie('refreshtoken')
+     res.status(200).json({
+        message:"logout all session sucessfully"
+     })
+ }
+  
+ async function login(req,res)
+  {
+    const {email,password}=req.body;
+    const user=await userModel.findOne({email:email});
+    if(!user){
+   return res.status(400).json({
+    message:" user not found"
+   })
+    }
+ const isPasswordValid =await bcrypt.compare(password,user.password);
+ if(!isPasswordValid){
+    return res.status(400).json({
+        message:"invalid password"
+       })
+ }
+ const refreshtoken =jwt.sign({
+    id:user._id
+},process.env.jwt_secret,{
+    expiresIn:'7d'
+}   )
+
+ const session =await sessionModel.create({
+    userId:user._id,
+    refreshToken:crypto.createHash('sha256').update(refreshtoken).digest('hex'),
+    ip:req.ip,
+    userAgent:req.get('User-Agent')
+ })
+ 
+ res.cookie('refreshtoken',refreshtoken,{
+    httpOnly:true,
+    secure :false,
+    sameSite:'strict',
+ })
+ const acesstoken =jwt.sign({
+    id:user._id
+},process.env.jwt_secret,{
+    expiresIn:'15m'
+}   )
+res.status(200).json({
+    message:"login sucessfully",
+    acesstoken:acesstoken
+})
+  }
  
     
- export  {register,refreshToken,logout};
+ export  {register,refreshToken,logout,login,logoutall};
